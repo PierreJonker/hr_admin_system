@@ -20,6 +20,7 @@ model User {
   subordinates  User[]    @relation("Manager")
   departments   Department[] @relation("DepartmentEmployees")
   createdAt     DateTime  @default(now())
+  role          String  @default("Employee")
 }
 
 model Department {

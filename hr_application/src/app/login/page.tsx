@@ -1,9 +1,14 @@
-import Navbar from "../navbar/Navbar"; // Adjust the path to your Navbar component
+'use client'
+import { signIn } from "next-auth/react";
+import { useState } from "react";
 
 export default function Home() {
+  const [loading, setLoading] = useState(false);
+
+  const loginUser = async () => {
+    await signIn("credentials",{email:'hradmin@test.com', password: 'TestPass1234', redirect: true, redirectTo: '/' } )
+  };
   return (
-    <main className="flex flex-col min-h-screen bg-gray-100">
-      <Navbar />
       <div className="flex flex-grow items-center justify-center">
         <div className="p-8 bg-white rounded shadow-md w-full max-w-sm">
           <h1 className="text-2xl font-bold mb-4 text-center">Login</h1>
@@ -31,6 +36,9 @@ export default function Home() {
               />
             </div>
             <button
+            onClick={async (e) => {
+              e.preventDefault()
+              loginUser()}}
               type="submit"
               className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition"
             >
@@ -39,6 +47,5 @@ export default function Home() {
           </form>
         </div>
       </div>
-    </main>
   );
 }
