@@ -4,6 +4,8 @@ import { api } from "~/trpc/react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 // Define Employee Type
 type Employee = {
@@ -28,7 +30,7 @@ export default function EmployeesPage() {
   const [newStatus, setNewStatus] = useState<"Active" | "Inactive">("Active");
   const [allDepartments, setAllDepartments] = useState<{ id: number; name: string }[]>([]);
 
-  const { data, isLoading, error } = api.user.getAllEmployees.useQuery();
+  const { data, isLoading, error, refetch } = api.user.getAllEmployees.useQuery();
   const fetchDepartments = api.department.getAllDepartments.useQuery();
   const updateEmployee = api.user.updateEmployee.useMutation();
 
@@ -52,24 +54,36 @@ export default function EmployeesPage() {
 
   const handleSave = async () => {
     if (selectedEmployee) {
-      const updatePayload: any = {
-        id: selectedEmployee.id,
-        telephone: selectedEmployee.telephone,
-        firstName: selectedEmployee.firstName,
-        lastName: selectedEmployee.lastName,
-      };
+      try {
+        const updatePayload: any = {
+          id: selectedEmployee.id,
+          telephone: selectedEmployee.telephone,
+          firstName: selectedEmployee.firstName,
+          lastName: selectedEmployee.lastName,
+        };
 
-      if (session?.user?.role === "Admin") {
-        updatePayload.email = selectedEmployee.email;
-        updatePayload.role = newRole;
-        updatePayload.status = newStatus;
-        updatePayload.departmentIds = Array.isArray(selectedEmployee.departments)
-          ? selectedEmployee.departments.map((dept) => dept.id)
-          : [];
+        if (session?.user?.role === "Admin") {
+          updatePayload.email = selectedEmployee.email;
+          updatePayload.role = newRole;
+          updatePayload.status = newStatus;
+          updatePayload.departmentIds = Array.isArray(selectedEmployee.departments)
+            ? selectedEmployee.departments.map((dept) => dept.id)
+            : [];
+        }
+
+        // Update mutation call
+        await updateEmployee.mutateAsync(updatePayload);
+
+        // Show success notification
+        toast.success("Update successful!");
+        setSelectedEmployee(null);
+
+        // Refresh the employee list
+        await refetch();
+      } catch (err) {
+        // Show error notification
+        toast.error("Update failed. Please try again.");
       }
-
-      await updateEmployee.mutateAsync(updatePayload);
-      setSelectedEmployee(null);
     }
   };
 
@@ -84,6 +98,8 @@ export default function EmployeesPage() {
 
   return (
     <main className="p-8">
+      <ToastContainer position="top-right" autoClose={3000} />
+
       <h1 className="text-3xl font-bold mb-6">Employees</h1>
       <div className="overflow-x-auto">
         <table className="min-w-full bg-white border rounded shadow-md">
