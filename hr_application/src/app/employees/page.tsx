@@ -8,11 +8,14 @@ import { useEffect, useState } from "react";
 // Define Employee Type
 type Employee = {
   id: number;
-  firstName: string; // Corrected field name
-  lastName: string;  // Corrected field name
+  firstName: string;
+  lastName: string;
   email: string;
   role: string;
   status: string;
+  telephone: string;
+  manager: string | "N/A";
+  departments: string; // Flattened string from backend
 };
 
 export default function EmployeesPage() {
@@ -53,8 +56,11 @@ export default function EmployeesPage() {
               <th className="px-4 py-2 text-left">First Name</th>
               <th className="px-4 py-2 text-left">Last Name</th>
               <th className="px-4 py-2 text-left">Email</th>
-              <th className="px-4 py-2 text-left">Role</th>
+              <th className="px-4 py-2 text-left">Telephone</th>
+              <th className="px-4 py-2 text-left">Manager</th>
+              <th className="px-4 py-2 text-left">Departments</th>
               <th className="px-4 py-2 text-left">Status</th>
+              <th className="px-4 py-2 text-left">Role</th>
             </tr>
           </thead>
           <tbody>
@@ -64,13 +70,16 @@ export default function EmployeesPage() {
                   <td className="px-4 py-2">{employee.firstName || "-"}</td>
                   <td className="px-4 py-2">{employee.lastName || "-"}</td>
                   <td className="px-4 py-2">{employee.email || "-"}</td>
-                  <td className="px-4 py-2">{employee.role || "-"}</td>
+                  <td className="px-4 py-2">{employee.telephone || "N/A"}</td>
+                  <td className="px-4 py-2">{employee.manager || "N/A"}</td>
+                  <td className="px-4 py-2">{employee.departments || "N/A"}</td>
                   <td className="px-4 py-2">{employee.status || "-"}</td>
+                  <td className="px-4 py-2">{employee.role || "-"}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={5} className="text-center py-4">
+                <td colSpan={8} className="text-center py-4">
                   No employees found.
                 </td>
               </tr>

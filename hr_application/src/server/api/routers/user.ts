@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   createTRPCRouter,
   protectedProcedure,
-  publicProcedure,
 } from "~/server/api/trpc";
 import { db } from "~/server/db";
 
@@ -11,26 +10,69 @@ export const userRouter = createTRPCRouter({
   getAllEmployees: protectedProcedure.query(async () => {
     const employees = await db.user.findMany({
       select: {
-        id: true, // Ensure this matches your Prisma schema
-        firstName: true, // Use correct casing (firstName)
+        id: true,
+        firstName: true,
         lastName: true,
         email: true,
         role: true,
         status: true,
-        departments: true, // Add if necessary
+        telephone: true,
+        manager: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        departments: {
+          select: {
+            name: true,
+          },
+        },
       },
     });
-    return employees;
+
+    // Flatten manager's name and departments
+    return employees.map((emp) => ({
+      ...emp,
+      manager: emp.manager
+        ? `${emp.manager.firstName} ${emp.manager.lastName}`
+        : "N/A",
+      telephone: emp.telephone || "N/A",
+      departments: emp.departments.map((d) => d.name).join(", ") || "N/A",
+    }));
   }),
 
   // Fetch employee by ID
   getEmployeeById: protectedProcedure
-    .input(z.object({ id: z.number() })) // Use `z.number()` if `id` is a number in your schema
+    .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const employee = await db.user.findUnique({
-        where: { id: input.id }, // Ensure type matches (number or string)
+        where: { id: input.id },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+          status: true,
+          telephone: true,
+          manager: {
+            select: { firstName: true, lastName: true },
+          },
+          departments: {
+            select: { name: true },
+          },
+        },
       });
       if (!employee) throw new Error("Employee not found");
-      return employee;
+
+      return {
+        ...employee,
+        manager: employee.manager
+          ? `${employee.manager.firstName} ${employee.manager.lastName}`
+          : "N/A",
+        telephone: employee.telephone || "N/A",
+        departments: employee.departments.map((d) => d.name).join(", ") || "N/A",
+      };
     }),
 });
