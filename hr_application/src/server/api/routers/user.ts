@@ -75,4 +75,28 @@ export const userRouter = createTRPCRouter({
         departments: employee.departments.map((d) => d.name).join(", ") || "N/A",
       };
     }),
+
+  // Update employee telephone
+  updateEmployee: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(), // ID of the employee
+        telephone: z.string().optional(), // Updated telephone number
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { id, telephone } = input;
+
+      // Update the employee in the database
+      const updatedEmployee = await db.user.update({
+        where: { id },
+        data: { telephone },
+        select: {
+          id: true,
+          telephone: true,
+        },
+      });
+
+      return updatedEmployee;
+    }),
 });
