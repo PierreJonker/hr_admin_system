@@ -1,11 +1,28 @@
 "use client";
 
+import { z } from "zod";
 import { api } from "~/trpc/react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
+// Zod Schema for Employee Update
+const EmployeeUpdateSchema = z.object({
+  id: z.number(),
+  firstName: z.string().min(1, { message: "First name is required" }),
+  lastName: z.string().min(1, { message: "Last name is required" }),
+  email: z.string().email({ message: "Invalid email address" }),
+  telephone: z.string().min(1, { message: "Telephone number is required" }),
+  role: z.enum(["Admin", "Manager", "Employee"], { 
+    errorMap: () => ({ message: "Role is required" }) 
+  }),
+  status: z.enum(["Active", "Inactive"], { 
+    errorMap: () => ({ message: "Status is required" }) 
+  }),
+  departmentIds: z.array(z.number()).optional()
+});
 
 // Define Employee Type
 type Employee = {
@@ -38,13 +55,44 @@ export default function EmployeesPage() {
     if (status === "unauthenticated") {
       router.push("/login");
     }
+
+    if (status === "authenticated") {
+      // Check if login success toast should be shown
+      if (localStorage.getItem('loginToast') === 'true') {
+        toast.success("Login successful!");
+        // Remove the flag to prevent showing toast again
+        localStorage.removeItem('loginToast');
+      }
+    }
+
     if (data) {
-      setEmployees(data);
+      setEmployees(filterEmployees(data));
     }
     if (fetchDepartments.data) {
       setAllDepartments(fetchDepartments.data);
     }
   }, [status, router, data, fetchDepartments.data]);
+
+  // Filter employees based on role
+  const filterEmployees = (allEmployees: Employee[]) => {
+    if (!session?.user) return []; // Safely check if session.user exists
+    const currentUserId = session.user.id;
+  
+    if (session.user.role === "Admin") return allEmployees;
+  
+    return allEmployees.filter((employee) => {
+      if (session.user.role === "Manager") {
+        return (
+          employee.id === Number(currentUserId) ||
+          (Array.isArray(employee.departments) &&
+            employee.departments.some((dept) =>
+              session?.user?.departments?.includes(String(dept.id))
+            ))
+        );
+      }
+      return employee.id === Number(currentUserId);
+    });
+  };
 
   const handleEdit = (employee: Employee) => {
     setSelectedEmployee(employee);
@@ -71,8 +119,11 @@ export default function EmployeesPage() {
             : [];
         }
 
+        // Validate the payload using Zod
+        const validatedData = EmployeeUpdateSchema.parse(updatePayload);
+
         // Update mutation call
-        await updateEmployee.mutateAsync(updatePayload);
+        await updateEmployee.mutateAsync(validatedData);
 
         // Show success notification
         toast.success("Update successful!");
@@ -81,8 +132,16 @@ export default function EmployeesPage() {
         // Refresh the employee list
         await refetch();
       } catch (err) {
-        // Show error notification
-        toast.error("Update failed. Please try again.");
+        // Handle Zod validation errors
+        if (err instanceof z.ZodError) {
+          // Display validation errors
+          err.errors.forEach((error) => {
+            toast.error(error.message);
+        });
+        } else {
+          // Show generic error notification
+          toast.error("Update failed. Please try again.");
+        }
       }
     }
   };
@@ -104,7 +163,7 @@ export default function EmployeesPage() {
       <div className="overflow-x-auto">
         <table className="min-w-full bg-white border rounded shadow-md">
           <thead>
-            <tr className="bg-gray-200">
+            <tr className="bg-blue-500 text-white">
               <th className="px-4 py-2 text-left">First Name</th>
               <th className="px-4 py-2 text-left">Last Name</th>
               <th className="px-4 py-2 text-left">Email</th>

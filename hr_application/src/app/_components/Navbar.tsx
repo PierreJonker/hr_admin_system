@@ -6,6 +6,10 @@ import { signOut, useSession } from "next-auth/react";
 export default function Navbar() {
   const { data: session } = useSession(); // Get the user's session
 
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: "/login?logout=success" }); // Add query parameter
+  };
+
   return (
     <nav className="bg-blue-600 text-white p-4 shadow-md">
       <div className="container mx-auto flex justify-between items-center">
@@ -23,7 +27,7 @@ export default function Navbar() {
                 Departments
               </Link>
               <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
+                onClick={handleLogout}
                 className="hover:underline"
               >
                 Logout
