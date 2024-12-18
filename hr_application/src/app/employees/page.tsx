@@ -8,23 +8,18 @@ import { useEffect, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-// Comprehensive Zod Schema for Employee Update
 const EmployeeUpdateSchema = z.object({
   id: z.number(),
   firstName: z.string().min(1, { message: "First name is required" }),
   lastName: z.string().min(1, { message: "Last name is required" }),
   telephone: z.string().min(1, { message: "Telephone number is required" }),
   email: z.string().email({ message: "Invalid email address" }).optional(),
-  role: z.enum(["Admin", "Manager", "Employee"], { 
-    errorMap: () => ({ message: "Role is required" }) 
-  }).optional(),
-  status: z.enum(["Active", "Inactive"], { 
-    errorMap: () => ({ message: "Status is required" }) 
-  }).optional(),
+  role: z.enum(["Admin", "Manager", "Employee"], { errorMap: () => ({ message: "Role is required" }) }).optional(),
+  status: z.enum(["Active", "Inactive"], { errorMap: () => ({ message: "Status is required" }) }).optional(),
   departmentIds: z.array(z.number()).optional(),
 });
 
-// Employee Type
+type Department = { id: number; name: string };
 type Employee = {
   id: number;
   firstName: string;
@@ -34,7 +29,7 @@ type Employee = {
   status: "Active" | "Inactive";
   telephone: string;
   manager: string | "N/A";
-  departments: { id: number; name: string }[] | string;
+  departments: Department[] | string;
 };
 
 export default function EmployeesPage() {
@@ -46,8 +41,10 @@ export default function EmployeesPage() {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [newRole, setNewRole] = useState<"Admin" | "Manager" | "Employee" | null>(null);
   const [newStatus, setNewStatus] = useState<"Active" | "Inactive" | null>(null);
-  const [allDepartments, setAllDepartments] = useState<{ id: number; name: string }[]>([]);
-  const [hasShowLoginToast, setHasShowLoginToast] = useState(false);
+  const [allDepartments, setAllDepartments] = useState<Department[]>([]);
+  const [departmentFilter, setDepartmentFilter] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const { data, isLoading, error, refetch } = api.user.getAllEmployees.useQuery(undefined, {
     enabled: status === "authenticated",
@@ -63,47 +60,32 @@ export default function EmployeesPage() {
       return;
     }
 
-    if (status === "authenticated" && !hasShowLoginToast) {
-      const loginSuccess = searchParams.get("loginSuccess") === "true";
-
-      if (loginSuccess) {
-        toast.success("Login successful!");
-        setHasShowLoginToast(true);
-
-        setTimeout(() => {
-          const newSearchParams = new URLSearchParams(searchParams.toString());
-          newSearchParams.delete("loginSuccess");
-          router.replace(`/employees?${newSearchParams.toString()}`);
-        }, 500);
-      }
-    }
-
     if (data) {
-      setEmployees(filterEmployees(data));
+      setEmployees(data);
     }
 
     if (fetchDepartments.data) {
       setAllDepartments(fetchDepartments.data);
     }
-  }, [status, router, searchParams, data, fetchDepartments.data, hasShowLoginToast]);
+  }, [status, data, fetchDepartments.data]);
 
-  const filterEmployees = (allEmployees: Employee[]) => {
-    if (!session?.user) return [];
-    const currentUserId = session.user.id;
+  const filterEmployees = (): Employee[] => {
+    return employees.filter((employee) => {
+      const matchesDepartment =
+        departmentFilter === null ||
+        (Array.isArray(employee.departments) &&
+          employee.departments.some((dept) => dept.id === departmentFilter));
 
-    if (session.user.role === "Admin") return allEmployees;
+      const matchesStatus =
+        !statusFilter || employee.status.toLowerCase() === statusFilter.toLowerCase();
 
-    return allEmployees.filter((employee) => {
-      if (session.user.role === "Manager") {
-        return (
-          employee.id === Number(currentUserId) ||
-          (Array.isArray(employee.departments) &&
-            employee.departments.some((dept) =>
-              session?.user?.departments?.includes(String(dept.id))
-            ))
-        );
-      }
-      return employee.id === Number(currentUserId);
+      const matchesSearch =
+        employee.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        employee.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        employee.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        employee.telephone.includes(searchQuery);
+
+      return matchesDepartment && matchesStatus && matchesSearch;
     });
   };
 
@@ -165,6 +147,40 @@ export default function EmployeesPage() {
       <ToastContainer position="top-right" autoClose={3000} />
 
       <h1 className="text-3xl font-bold mb-6">Employees</h1>
+
+      <div className="mb-4 flex flex-wrap gap-4">
+        <input
+          type="text"
+          placeholder="Search by name, email, or telephone"
+          className="border rounded px-3 py-2"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+
+        <select
+          className="border rounded px-3 py-2"
+          value={departmentFilter || ""}
+          onChange={(e) => setDepartmentFilter(Number(e.target.value) || null)}
+        >
+          <option value="">All Departments</option>
+          {allDepartments.map((dept) => (
+            <option key={dept.id} value={dept.id}>
+              {dept.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="border rounded px-3 py-2"
+          value={statusFilter || ""}
+          onChange={(e) => setStatusFilter(e.target.value || null)}
+        >
+          <option value="">All Statuses</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="min-w-full bg-white border rounded shadow-md">
           <thead>
@@ -181,7 +197,7 @@ export default function EmployeesPage() {
             </tr>
           </thead>
           <tbody>
-            {employees.map((emp) => (
+            {filterEmployees().map((emp) => (
               <tr key={emp.id} className="hover:bg-gray-100">
                 <td className="px-4 py-2">{emp.firstName}</td>
                 <td className="px-4 py-2">{emp.lastName}</td>
@@ -209,13 +225,11 @@ export default function EmployeesPage() {
         </table>
       </div>
 
-      {/* Edit Modal */}
       {selectedEmployee && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white p-6 rounded shadow-md w-96">
             <h2 className="text-xl font-bold mb-4">Edit Employee</h2>
 
-            {/* Editable for all roles */}
             <label className="block mb-2">First Name</label>
             <input
               className="w-full px-3 py-2 border rounded"
@@ -243,7 +257,6 @@ export default function EmployeesPage() {
               }
             />
 
-            {/* Admin-only fields */}
             {session?.user?.role === "Admin" && (
               <>
                 <label className="block mb-2 mt-2">Email</label>
