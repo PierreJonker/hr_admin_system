@@ -43,11 +43,8 @@ export default function LoginPage() {
       if (res?.error) {
         toast.error(res.error);
       } else {
-        // Store login success in localStorage to persist across redirect
-        localStorage.setItem('loginToast', 'true');
-        
-        // Redirect to Employees page
-        router.push("/employees");
+        // Redirect with a query parameter for login success
+        router.push("/employees?loginSuccess=true");
       }
     } catch (err) {
       if (err instanceof z.ZodError) {
