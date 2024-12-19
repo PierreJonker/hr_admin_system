@@ -23,13 +23,15 @@ export default function Navbar() {
               <Link href="/employees" className="hover:underline">
                 Employees
               </Link>
+              {session.user?.role === "Admin" && (
+                <Link href="/admin_page" className="hover:underline">
+                  Admin Page
+                </Link>
+              )}
               <Link href="/departments" className="hover:underline">
                 Departments
               </Link>
-              <button
-                onClick={handleLogout}
-                className="hover:underline"
-              >
+              <button onClick={handleLogout} className="hover:underline">
                 Logout
               </button>
             </>

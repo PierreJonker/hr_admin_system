@@ -13,9 +13,20 @@ const EmployeeUpdateSchema = z.object({
   firstName: z.string().min(1, { message: "First name is required" }),
   lastName: z.string().min(1, { message: "Last name is required" }),
   telephone: z.string().min(1, { message: "Telephone number is required" }),
-  email: z.string().email({ message: "Invalid email address" }).optional(),
-  role: z.enum(["Admin", "Manager", "Employee"], { errorMap: () => ({ message: "Role is required" }) }).optional(),
-  status: z.enum(["Active", "Inactive"], { errorMap: () => ({ message: "Status is required" }) }).optional(),
+  email: z
+    .string()
+    .email({ message: "Invalid email address" })
+    .optional(),
+  role: z
+    .enum(["Admin", "Manager", "Employee"], {
+      errorMap: () => ({ message: "Role is required" }),
+    })
+    .optional(),
+  status: z
+    .enum(["Active", "Inactive"], {
+      errorMap: () => ({ message: "Status is required" }),
+    })
+    .optional(),
   departmentIds: z.array(z.number()).optional(),
 });
 
@@ -35,7 +46,6 @@ type Employee = {
 export default function EmployeesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -57,24 +67,29 @@ export default function EmployeesPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
-      return;
+    } else {
+      if (data) setEmployees(data);
+      if (fetchDepartments.data) setAllDepartments(fetchDepartments.data);
     }
-
-    if (data) {
-      setEmployees(data);
-    }
-
-    if (fetchDepartments.data) {
-      setAllDepartments(fetchDepartments.data);
-    }
-  }, [status, data, fetchDepartments.data]);
+  }, [status, data, fetchDepartments.data, router]);
 
   const filterEmployees = (): Employee[] => {
+    if (!session?.user) return [];
+
+    const currentUserId = Number(session.user.id);
+    // Convert session user department IDs to numbers and filter out any invalid conversions
+    const userDepartmentIds = (session.user.departments ?? [])
+      .map(id => parseInt(id.toString()))
+      .filter(id => !isNaN(id));
+
     return employees.filter((employee) => {
       const matchesDepartment =
         departmentFilter === null ||
         (Array.isArray(employee.departments) &&
-          employee.departments.some((dept) => dept.id === departmentFilter));
+          employee.departments.some((dept) => {
+            // Ensure we're comparing numbers with numbers
+            return userDepartmentIds.includes(Number(dept.id));
+          }));
 
       const matchesStatus =
         !statusFilter || employee.status.toLowerCase() === statusFilter.toLowerCase();
@@ -85,7 +100,22 @@ export default function EmployeesPage() {
         employee.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         employee.telephone.includes(searchQuery);
 
-      return matchesDepartment && matchesStatus && matchesSearch;
+      const meetsBasicCriteria = matchesDepartment && matchesStatus && matchesSearch;
+
+      if (session.user.role === "Employee") {
+        return employee.id === currentUserId && meetsBasicCriteria;
+      }
+
+      if (session.user.role === "Manager") {
+        const isOwnProfile = employee.id === currentUserId;
+        const isInManagedDepartment =
+          Array.isArray(employee.departments) &&
+          employee.departments.some((dept) => userDepartmentIds.includes(Number(dept.id)));
+
+        return (isOwnProfile || isInManagedDepartment) && meetsBasicCriteria;
+      }
+
+      return meetsBasicCriteria;
     });
   };
 
@@ -257,6 +287,20 @@ export default function EmployeesPage() {
               }
             />
 
+            {session?.user?.role === "Admin" && selectedEmployee.id !== Number(session.user.id) && (
+              <>
+                <label className="block mb-2 mt-2">Role</label>
+                <select
+                  className="w-full px-3 py-2 border rounded"
+                  value={newRole || selectedEmployee.role}
+                  onChange={(e) => setNewRole(e.target.value as "Manager" | "Employee")}
+                >
+                  <option value="Manager">Manager</option>
+                  <option value="Employee">Employee</option>
+                </select>
+              </>
+            )}
+
             {session?.user?.role === "Admin" && (
               <>
                 <label className="block mb-2 mt-2">Email</label>
@@ -267,18 +311,6 @@ export default function EmployeesPage() {
                     setSelectedEmployee({ ...selectedEmployee, email: e.target.value })
                   }
                 />
-
-                <label className="block mb-2 mt-2">Role</label>
-                <select
-                  className="w-full px-3 py-2 border rounded"
-                  value={newRole || selectedEmployee.role}
-                  onChange={(e) => setNewRole(e.target.value as "Admin" | "Manager" | "Employee")}
-                >
-                  <option value="Admin">Admin</option>
-                  <option value="Manager">Manager</option>
-                  <option value="Employee">Employee</option>
-                </select>
-
                 <label className="block mb-2 mt-2">Status</label>
                 <select
                   className="w-full px-3 py-2 border rounded"
