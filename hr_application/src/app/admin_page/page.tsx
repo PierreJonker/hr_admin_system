@@ -1,11 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { api } from "~/trpc/react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 export default function AdminPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  // Redirect if not authenticated or not an admin
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    } else if (status === "authenticated" && session?.user?.role !== "Admin") {
+      router.push("/unauthorized"); // Redirect to an unauthorized page
+    }
+  }, [status, session, router]);
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -36,6 +50,10 @@ export default function AdminPage() {
       toast.error("Failed to create user. Please try again.");
     }
   };
+
+  if (status === "loading") {
+    return <p>Loading...</p>;
+  }
 
   return (
     <main className="p-8">
@@ -89,7 +107,6 @@ export default function AdminPage() {
           >
             <option value="Employee">Employee</option>
             <option value="Manager">Manager</option>
-            <option value="Admin">Admin</option>
           </select>
         </div>
 
