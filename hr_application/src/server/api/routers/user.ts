@@ -3,9 +3,41 @@ import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { db } from "~/server/db";
 
 export const userRouter = createTRPCRouter({
-  // Fetch all employees
-  getAllEmployees: protectedProcedure.query(async () => {
+  getAllEmployees: protectedProcedure.query(async ({ ctx }) => {
+    const currentUser = await db.user.findUnique({
+      where: { 
+        id: Number(ctx.session.user.id) 
+      },
+      include: {
+        departments: true,
+        // Get departments where user is the manager
+        Department: true
+      },
+    });
+
+    if (!currentUser) throw new Error("User not found");
+
+    // Get departments where the current user is a manager
+    const managedDepartmentIds = currentUser.Department?.map(d => d.id) ?? [];
+    
+    // Build the query based on user role
+    const whereClause = (() => {
+      if (currentUser.role === "Admin") {
+        return {}; // Admin sees all
+      }
+      if (currentUser.role === "Manager") {
+        return {
+          OR: [
+            { id: currentUser.id }, // Own profile
+            { departments: { some: { id: { in: managedDepartmentIds } } } }, // Users in managed departments
+          ],
+        };
+      }
+      return { id: currentUser.id }; // Regular employees see only themselves
+    })();
+
     const employees = await db.user.findMany({
+      where: whereClause,
       select: {
         id: true,
         firstName: true,
@@ -14,116 +46,91 @@ export const userRouter = createTRPCRouter({
         role: true,
         status: true,
         telephone: true,
+        departments: {
+          select: {
+            id: true,
+            name: true,
+            managerId: true,
+          },
+        },
         manager: {
           select: {
             firstName: true,
             lastName: true,
           },
         },
-        departments: {
-          select: {
-            name: true,
-          },
-        },
       },
     });
 
-    // Flatten manager's name and departments
+    // Format the response
     return employees.map((emp) => ({
       ...emp,
       role: emp.role as "Admin" | "Manager" | "Employee",
       status: emp.status as "Active" | "Inactive",
-      manager: emp.manager
+      telephone: emp.telephone || "N/A",
+      departments: emp.departments.map(dept => ({
+        id: dept.id,
+        name: dept.name,
+        isManager: dept.managerId === emp.id
+      })),
+      manager: emp.manager 
         ? `${emp.manager.firstName} ${emp.manager.lastName}`
         : "N/A",
-      telephone: emp.telephone || "N/A",
-      departments: emp.departments.map((d) => d.name).join(", ") || "N/A",
     }));
   }),
 
-  // Fetch employee by ID
-  getEmployeeById: protectedProcedure
-    .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      const employee = await db.user.findUnique({
-        where: { id: input.id },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          role: true,
-          status: true,
-          telephone: true,
-          manager: {
-            select: { firstName: true, lastName: true },
-          },
-          departments: {
-            select: { name: true },
-          },
-        },
-      });
-      if (!employee) throw new Error("Employee not found");
-
-      return {
-        ...employee,
-        role: employee.role as "Admin" | "Manager" | "Employee",
-        status: employee.status as "Active" | "Inactive",
-        manager: employee.manager
-          ? `${employee.manager.firstName} ${employee.manager.lastName}`
-          : "N/A",
-        telephone: employee.telephone || "N/A",
-        departments: employee.departments.map((d) => d.name).join(", ") || "N/A",
-      };
-    }),
-
-  // Update employee details (telephone, role, status, firstName, lastName, email, departments)
   updateEmployee: protectedProcedure
     .input(
       z.object({
-        id: z.number(), // ID of the employee
-        telephone: z.string().optional(), // Updated telephone number
-        role: z.enum(["Admin", "Manager", "Employee"]).optional(), // Updated role
-        status: z.enum(["Active", "Inactive"]).optional(), // Updated status
-        firstName: z.string().optional(), // Updated first name
-        lastName: z.string().optional(), // Updated last name
-        email: z.string().email().optional(), // Updated email
-        departmentIds: z.array(z.number()).optional(), // Updated departments as IDs
+        id: z.number(),
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+        telephone: z.string().optional(),
+        email: z.string().email().optional(),
+        role: z.enum(["Admin", "Manager", "Employee"]).optional(),
+        status: z.enum(["Active", "Inactive"]).optional(),
+        departmentIds: z.array(z.number()).optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { id, departmentIds, ...updates } = input;
 
-      // Update the employee in the database
       const updatedEmployee = await db.user.update({
         where: { id },
         data: {
           ...updates,
-          // Update departments by connecting to their IDs
-          departments: departmentIds
-            ? {
-                set: departmentIds.map((deptId) => ({ id: deptId })),
-              }
-            : undefined,
+          ...(departmentIds && {
+            departments: {
+              set: departmentIds.map(deptId => ({ id: deptId }))
+            }
+          })
         },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          telephone: true,
-          role: true,
-          status: true,
+        include: {
           departments: {
-            select: { id: true, name: true },
+            select: {
+              id: true,
+              name: true,
+              managerId: true,
+            },
+          },
+          manager: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
           },
         },
       });
 
       return {
         ...updatedEmployee,
-        departments: updatedEmployee.departments
-          ? updatedEmployee.departments.map((d) => d.name).join(", ")
+        departments: updatedEmployee.departments.map(dept => ({
+          id: dept.id,
+          name: dept.name,
+          isManager: dept.managerId === updatedEmployee.id
+        })),
+        manager: updatedEmployee.manager
+          ? `${updatedEmployee.manager.firstName} ${updatedEmployee.manager.lastName}`
           : "N/A",
       };
     }),

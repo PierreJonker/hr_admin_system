@@ -15,17 +15,23 @@ model User {
   email         String   @unique
   password      String
   status        String   @default("Active")
-  managerId     Int?     
+  managerId     Int?
   manager       User?     @relation("Manager", fields: [managerId], references: [id])
   subordinates  User[]    @relation("Manager")
   departments   Department[] @relation("DepartmentEmployees")
   createdAt     DateTime  @default(now())
   role          String  @default("Employee")
+
+  Department Department[] // This should likely be removed or updated
 }
 
 model Department {
-  id           Int       @id @default(autoincrement())
-  name         String
-  status       String    @default("Active")
-  employees    User[]    @relation("DepartmentEmployees")
+  id        Int      @id @default(autoincrement())
+  name      String
+  managerId Int?
+  manager   User?    @relation(fields: [managerId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  User User[] @relation("DepartmentEmployees")
 }

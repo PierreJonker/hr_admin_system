@@ -19,6 +19,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session, status } = useSession();
+
+  // Redirect authenticated users away from the login page
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.push("/employees");
+    }
+  }, [status, router]);
 
   // Check if logout query exists and show success toast
   useEffect(() => {
