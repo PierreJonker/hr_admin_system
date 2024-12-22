@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { Search, Filter } from "lucide-react";
 
 const EmployeeUpdateSchema = z.object({
   id: z.number(),
@@ -74,9 +75,9 @@ export default function EmployeesPage() {
     } else {
       if (data) setEmployees(data);
       if (fetchDepartments.data) {
-        const transformedDepartments = fetchDepartments.data.map(dept => ({
+        const transformedDepartments = fetchDepartments.data.map((dept) => ({
           ...dept,
-          isManager: false
+          isManager: false,
         }));
         setAllDepartments(transformedDepartments);
       }
@@ -87,12 +88,12 @@ export default function EmployeesPage() {
     if (!session?.user) return [];
 
     return employees.filter((employee) => {
-      const matchesDepartment = 
-        departmentFilter === null || 
-        employee.departments.some(dept => dept.id === departmentFilter);
+      const matchesDepartment =
+        departmentFilter === null ||
+        employee.departments.some((dept) => dept.id === departmentFilter);
 
-      const matchesStatus = 
-        !statusFilter || 
+      const matchesStatus =
+        !statusFilter ||
         employee.status.toLowerCase() === statusFilter.toLowerCase();
 
       const matchesSearch =
@@ -133,7 +134,7 @@ export default function EmployeesPage() {
           ...updatePayload,
           email: selectedEmployee.email,
           status: newStatus || selectedEmployee.status,
-          departmentIds: selectedEmployee.departments.map(dept => dept.id),
+          departmentIds: selectedEmployee.departments.map((dept) => dept.id),
         };
 
         // Only add role to payload if editing a non-admin account
@@ -175,13 +176,29 @@ export default function EmployeesPage() {
       <h1 className="text-3xl font-bold mb-6">Employees</h1>
 
       <div className="mb-4 flex flex-wrap gap-4">
-        <input
-          type="text"
-          placeholder="Search by name, email, or telephone"
-          className="border rounded px-3 py-2"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search by name, email, or telephone"
+            className="pl-10 pr-4 py-3 border rounded w-full"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Filter className="text-gray-400" />
+          <select
+            className="border rounded px-4 py-3"
+            value={statusFilter || ""}
+            onChange={(e) => setStatusFilter(e.target.value || null)}
+          >
+            <option value="">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
 
         <select
           className="border rounded px-3 py-2"
@@ -194,16 +211,6 @@ export default function EmployeesPage() {
               {dept.name}
             </option>
           ))}
-        </select>
-
-        <select
-          className="border rounded px-3 py-2"
-          value={statusFilter || ""}
-          onChange={(e) => setStatusFilter(e.target.value || null)}
-        >
-          <option value="">All Statuses</option>
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
         </select>
       </div>
 
@@ -241,7 +248,9 @@ export default function EmployeesPage() {
                 </td>
                 <td className="px-4 py-2">
                   <span className={`px-2 py-1 rounded ${
-                    emp.status === "Active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    emp.status === "Active"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-red-100 text-red-800"
                   }`}>
                     {emp.status}
                   </span>

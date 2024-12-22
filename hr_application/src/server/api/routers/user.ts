@@ -10,15 +10,14 @@ export const userRouter = createTRPCRouter({
       },
       include: {
         departments: true,
-        // Get departments where user is the manager
-        Department: true
+        managedDepartments: true, // Get departments where user is a manager
       },
     });
 
     if (!currentUser) throw new Error("User not found");
 
     // Get departments where the current user is a manager
-    const managedDepartmentIds = currentUser.Department?.map(d => d.id) ?? [];
+    const managedDepartmentIds = currentUser.managedDepartments?.map(d => d.id) ?? [];
     
     // Build the query based on user role
     const whereClause = (() => {
@@ -50,7 +49,17 @@ export const userRouter = createTRPCRouter({
           select: {
             id: true,
             name: true,
-            managerId: true,
+            managers: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        },
+        managedDepartments: {
+          select: {
+            id: true,
+            name: true,
           },
         },
         manager: {
@@ -71,7 +80,11 @@ export const userRouter = createTRPCRouter({
       departments: emp.departments.map(dept => ({
         id: dept.id,
         name: dept.name,
-        isManager: dept.managerId === emp.id
+        isManager: dept.managers.some(manager => manager.id === emp.id)
+      })),
+      managedDepartments: emp.managedDepartments.map(dept => ({
+        id: dept.id,
+        name: dept.name
       })),
       manager: emp.manager 
         ? `${emp.manager.firstName} ${emp.manager.lastName}`
@@ -90,10 +103,11 @@ export const userRouter = createTRPCRouter({
         role: z.enum(["Admin", "Manager", "Employee"]).optional(),
         status: z.enum(["Active", "Inactive"]).optional(),
         departmentIds: z.array(z.number()).optional(),
+        managedDepartmentIds: z.array(z.number()).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { id, departmentIds, ...updates } = input;
+      const { id, departmentIds, managedDepartmentIds, ...updates } = input;
 
       const updatedEmployee = await db.user.update({
         where: { id },
@@ -103,6 +117,11 @@ export const userRouter = createTRPCRouter({
             departments: {
               set: departmentIds.map(deptId => ({ id: deptId }))
             }
+          }),
+          ...(managedDepartmentIds && {
+            managedDepartments: {
+              set: managedDepartmentIds.map(deptId => ({ id: deptId }))
+            }
           })
         },
         include: {
@@ -110,7 +129,17 @@ export const userRouter = createTRPCRouter({
             select: {
               id: true,
               name: true,
-              managerId: true,
+              managers: {
+                select: {
+                  id: true,
+                },
+              },
+            },
+          },
+          managedDepartments: {
+            select: {
+              id: true,
+              name: true,
             },
           },
           manager: {
@@ -127,7 +156,11 @@ export const userRouter = createTRPCRouter({
         departments: updatedEmployee.departments.map(dept => ({
           id: dept.id,
           name: dept.name,
-          isManager: dept.managerId === updatedEmployee.id
+          isManager: dept.managers.some(manager => manager.id === updatedEmployee.id)
+        })),
+        managedDepartments: updatedEmployee.managedDepartments.map(dept => ({
+          id: dept.id,
+          name: dept.name
         })),
         manager: updatedEmployee.manager
           ? `${updatedEmployee.manager.firstName} ${updatedEmployee.manager.lastName}`

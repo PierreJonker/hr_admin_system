@@ -8,30 +8,33 @@ datasource db {
 }
 
 model User {
-  id            Int       @id @default(autoincrement())
-  firstName     String
-  lastName      String
-  telephone     String?
-  email         String   @unique
-  password      String
-  status        String   @default("Active")
-  managerId     Int?
-  manager       User?     @relation("Manager", fields: [managerId], references: [id])
-  subordinates  User[]    @relation("Manager")
-  departments   Department[] @relation("DepartmentEmployees")
-  createdAt     DateTime  @default(now())
-  role          String  @default("Employee")
-
-  Department Department[] // This should likely be removed or updated
+  id                Int          @id @default(autoincrement())
+  firstName         String
+  lastName          String
+  telephone         String?
+  email             String       @unique
+  password          String
+  status            String       @default("Active")
+  role              String       @default("Employee")
+  createdAt         DateTime     @default(now())
+  
+  // Manager-subordinate relationship
+  managerId         Int?
+  manager           User?        @relation("Manager", fields: [managerId], references: [id])
+  subordinates      User[]       @relation("Manager")
+  
+  // Department relationships
+  departments       Department[] @relation("DepartmentEmployees")
+  managedDepartments Department[] @relation("DepartmentManagers")
 }
 
 model Department {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   name      String
-  managerId Int?
-  manager   User?    @relation(fields: [managerId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  User User[] @relation("DepartmentEmployees")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  // Many-to-many relationships
+  users     User[]    @relation("DepartmentEmployees")
+  managers  User[]    @relation("DepartmentManagers")
 }

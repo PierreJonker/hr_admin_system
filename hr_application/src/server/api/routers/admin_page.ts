@@ -25,12 +25,19 @@ export const admin_pageRouter = createTRPCRouter({
             name: true,
           },
         },
+        managedDepartments: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
     return users.map((user) => ({
       ...user,
       departments: user.departments.map((dept) => dept.name).join(", ") || "N/A",
+      managedDepartments: user.managedDepartments.map((dept) => dept.name).join(", ") || "N/A",
     }));
   }),
 
@@ -90,7 +97,14 @@ export const admin_pageRouter = createTRPCRouter({
 
     const departments = await db.department.findMany({
       include: {
-        User: {
+        users: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        managers: {
           select: {
             id: true,
             firstName: true,
@@ -103,51 +117,69 @@ export const admin_pageRouter = createTRPCRouter({
     return departments.map((dept) => ({
       id: dept.id,
       name: dept.name,
-      managerId: dept.managerId,
-      users: dept.User.map((user) => `${user.firstName} ${user.lastName}`).join(", ") || "No Users",
+      managerIds: dept.managers.map(manager => manager.id),
+      managerNames: dept.managers.map(manager => `${manager.firstName} ${manager.lastName}`).join(", ") || "No Manager",
+      users: dept.users.map((user) => `${user.firstName} ${user.lastName}`).join(", ") || "No Users",
     }));
   }),
 
   createDepartment: protectedProcedure
-  .input(
-    z.object({
-      name: z.string(),
-      managerId: z.number().optional(),
-      employeeIds: z.array(z.number()).optional(),
-    })
-  )
-  .mutation(async ({ input, ctx }) => {
-    if (ctx.session.user.role !== "Admin") {
-      throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized" });
-    }
+    .input(
+      z.object({
+        name: z.string(),
+        managerIds: z.array(z.number()).optional(),
+        employeeIds: z.array(z.number()).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.session.user.role !== "Admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized" });
+      }
 
-    // Create the department
-    const newDepartment = await db.department.create({
-      data: {
-        name: input.name,
-        managerId: input.managerId || null,
-        User: input.employeeIds
-          ? {
-              connect: input.employeeIds.map((id) => ({ id })),
-            }
-          : undefined,
-      },
-    });
-    
-    // If a manager is assigned, associate the manager with the department
-    if (input.managerId) {
-      await db.user.update({
-        where: { id: input.managerId },
+      const newDepartment = await db.department.create({
         data: {
-          departments: {
-            connect: { id: newDepartment.id },
-          },
+          name: input.name,
+          managers: input.managerIds
+            ? {
+                connect: input.managerIds.map((id) => ({ id })),
+              }
+            : undefined,
+          users: input.employeeIds
+            ? {
+                connect: input.employeeIds.map((id) => ({ id })),
+              }
+            : undefined,
         },
       });
-    }
-    
-    return { success: true, message: "Department created successfully" };
-  }),
+
+      return { success: true, message: "Department created successfully" };
+    }),
+
+  updateDepartment: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string(),
+        managerIds: z.array(z.number()),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.session.user.role !== "Admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized" });
+      }
+
+      const updatedDepartment = await db.department.update({
+        where: { id: input.id },
+        data: {
+          name: input.name,
+          managers: {
+            set: input.managerIds.map(id => ({ id })),
+          }
+        },
+      });
+
+      return { success: true, message: "Department updated successfully" };
+    }),
 
   assignDepartments: protectedProcedure
     .input(
@@ -189,6 +221,34 @@ export const admin_pageRouter = createTRPCRouter({
     }));
   }),
 
+  deleteUser: protectedProcedure
+    .input(z.object({ userId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.session.user.role !== "Admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized" });
+      }
+
+      await db.user.delete({
+        where: { id: input.userId },
+      });
+
+      return { success: true, message: "User deleted successfully" };
+    }),
+
+  deleteDepartment: protectedProcedure
+    .input(z.object({ departmentId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.session.user.role !== "Admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized" });
+      }
+
+      await db.department.delete({
+        where: { id: input.departmentId },
+      });
+
+      return { success: true, message: "Department deleted successfully" };
+    }),
+
   assignUsersToDepartment: protectedProcedure
     .input(
       z.object({
@@ -204,8 +264,8 @@ export const admin_pageRouter = createTRPCRouter({
       await db.department.update({
         where: { id: input.departmentId },
         data: {
-          User: {
-            connect: input.userIds.map((id) => ({ id })),
+          users: {
+            set: input.userIds.map((id) => ({ id })),
           },
         },
       });
@@ -213,7 +273,6 @@ export const admin_pageRouter = createTRPCRouter({
       return { success: true, message: "Users assigned to department successfully" };
     }),
 
-  // Get a user by ID
   getUserById: protectedProcedure
     .input(z.object({ userId: z.number() }))
     .query(async ({ input, ctx }) => {
@@ -233,6 +292,9 @@ export const admin_pageRouter = createTRPCRouter({
           departments: {
             select: { id: true, name: true },
           },
+          managedDepartments: {
+            select: { id: true, name: true },
+          },
         },
       });
 
@@ -243,22 +305,6 @@ export const admin_pageRouter = createTRPCRouter({
       return user;
     }),
 
-  // Delete a user by ID
-  deleteUser: protectedProcedure
-    .input(z.object({ userId: z.number() }))
-    .mutation(async ({ input, ctx }) => {
-      if (ctx.session.user.role !== "Admin") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized" });
-      }
-
-      await db.user.delete({
-        where: { id: input.userId },
-      });
-
-      return { success: true, message: "User deleted successfully" };
-    }),
-
-  // Get a department by ID
   getDepartmentById: protectedProcedure
     .input(z.object({ departmentId: z.number() }))
     .query(async ({ input, ctx }) => {
@@ -269,7 +315,10 @@ export const admin_pageRouter = createTRPCRouter({
       const department = await db.department.findUnique({
         where: { id: input.departmentId },
         include: {
-          User: {
+          users: {
+            select: { id: true, firstName: true, lastName: true },
+          },
+          managers: {
             select: { id: true, firstName: true, lastName: true },
           },
         },
@@ -282,23 +331,9 @@ export const admin_pageRouter = createTRPCRouter({
       return {
         id: department.id,
         name: department.name,
-        managerId: department.managerId,
-        users: department.User.map((user) => `${user.firstName} ${user.lastName}`),
+        managerIds: department.managers.map(manager => manager.id),
+        managerNames: department.managers.map(manager => `${manager.firstName} ${manager.lastName}`),
+        users: department.users.map((user) => `${user.firstName} ${user.lastName}`),
       };
-    }),
-
-  // Delete a department by ID
-  deleteDepartment: protectedProcedure
-    .input(z.object({ departmentId: z.number() }))
-    .mutation(async ({ input, ctx }) => {
-      if (ctx.session.user.role !== "Admin") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized" });
-      }
-
-      await db.department.delete({
-        where: { id: input.departmentId },
-      });
-
-      return { success: true, message: "Department deleted successfully" };
     }),
 });
