@@ -12,7 +12,7 @@ This project comes with a setup script (`setup.sh`) to simplify the initial setu
    - Make sure you have Node.js (v16 or higher) and npm installed.
 
 2. **Run the Setup Script**:
-   Execute the following command in the root directory of the project:
+   Execute the following command in a Git Bash Terminal in the root directory of the project:
    ```bash
    ./setup.sh
    ```
