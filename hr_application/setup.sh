@@ -18,7 +18,7 @@ if [ ! -f .env ]; then
   echo ".env file not found. Creating one with sample values..."
   cat > .env <<EOL
 # Environment Variables for T3 Stack
-NEXTAUTH_SECRET="your-secret-key"
+AUTH_SECRET="p/wrSvsfu1HMIrQYnwab0F9LMborjQqSyGbq3+X/yv8="
 DATABASE_URL="file:./db.sqlite"
 EOL
   echo ".env file created with sample values. Update it as needed."
