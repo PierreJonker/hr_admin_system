@@ -41,7 +41,7 @@ npx prisma migrate dev
 # Step 6: Seed the database (optional)
 if [ -f prisma/seed.ts ]; then
   echo "Seeding the database..."
-  npx ts-node prisma/seed.ts
+  npx tsx prisma/seed.ts
 else
   echo "No seed file found. Skipping database seeding."
 fi
