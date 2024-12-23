@@ -28,6 +28,13 @@ interface Department {
   users: string;
 }
 
+interface ModalActions {
+  confirm: () => void;
+  cancel: () => void;
+  confirmText?: string;
+  cancelText?: string;
+}
+
 Modal.setAppElement("body");
 
 export default function AdminPage() {
@@ -38,15 +45,19 @@ export default function AdminPage() {
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
   const [confirmMessage, setConfirmMessage] = useState("");
-  
+  const [modalActions, setModalActions] = useState<ModalActions>({
+    confirm: () => {},
+    cancel: () => closeModal(),
+    confirmText: "Yes",
+    cancelText: "No"
+  });
+
   // UI state
   const [isUsersVisible, setIsUsersVisible] = useState(true);
   const [isDepartmentsVisible, setIsDepartmentsVisible] = useState(true);
   const [isUserFormVisible, setIsUserFormVisible] = useState(false);
   const [isDepartmentFormVisible, setIsDepartmentFormVisible] = useState(false);
   const [userSearch, setUserSearch] = useState("");
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
 
   // Form state
   const [firstName, setFirstName] = useState("");
@@ -55,6 +66,8 @@ export default function AdminPage() {
   const [role, setRole] = useState<"Employee" | "Admin" | "Manager">("Employee");
   const [telephone, setTelephone] = useState("");
   const [users, setUsers] = useState<User[]>([]);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
 
   const [departmentName, setDepartmentName] = useState("");
   const [selectedManagerIds, setSelectedManagerIds] = useState<number[]>([]);
@@ -144,15 +157,24 @@ export default function AdminPage() {
   };
 
   const handleDeleteUser = async (userId: number) => {
-    openModal("Are you sure you want to delete this user?", async () => {
-      try {
-        await deleteUser.mutateAsync({ userId });
-        toast.success("User deleted successfully!");
-        await fetchUsers.refetch();
-      } catch (error) {
-        console.error(error);
-        toast.error("Failed to delete user. Please try again.");
-      }
+    const user = users.find(u => u.id === userId);
+    openModal(`Are you sure you want to delete ${user?.firstName} ${user?.lastName}?`, async () => {});
+
+    setModalActions({
+      confirm: async () => {
+        try {
+          await deleteUser.mutateAsync({ userId });
+          toast.success("User deleted successfully!");
+          await fetchUsers.refetch();
+          closeModal();
+        } catch (error) {
+          console.error(error);
+          toast.error("Failed to delete user. Please try again.");
+        }
+      },
+      cancel: () => closeModal(),
+      confirmText: "Yes, Delete User",
+      cancelText: "Cancel"
     });
   };
 
@@ -160,10 +182,68 @@ export default function AdminPage() {
     e.preventDefault();
     try {
       if (isEditMode && selectedDepartment) {
+        // Find managers being removed
+        const removedManagerIds = selectedDepartment.managerIds.filter(
+          id => !selectedManagerIds.includes(id)
+        );
+        
+        if (removedManagerIds.length > 0) {
+          const removedManager = availableManagers.find(
+            manager => removedManagerIds.includes(manager.id)
+          );
+
+          if (removedManager) {
+            openModal(
+              `Do you want to remove ${removedManager.name} as an employee from the department as well?`,
+              async () => {}
+            );
+
+            setModalActions({
+              confirm: async () => {
+                await updateDepartment.mutateAsync({
+                  id: selectedDepartment.id,
+                  name: departmentName,
+                  managerIds: selectedManagerIds,
+                  removeFromDepartment: [removedManager.id],
+                });
+                toast.success("Manager removed from department completely");
+                closeModal();
+                setDepartmentName("");
+                setSelectedManagerIds([]);
+                setIsDepartmentFormVisible(false);
+                setIsEditMode(false);
+                setSelectedDepartment(null);
+                await fetchDepartments.refetch();
+              },
+              cancel: async () => {
+                await updateDepartment.mutateAsync({
+                  id: selectedDepartment.id,
+                  name: departmentName,
+                  managerIds: selectedManagerIds,
+                  removeFromDepartment: [],
+                });
+                toast.success("Manager role removed but kept as employee");
+                closeModal();
+                setDepartmentName("");
+                setSelectedManagerIds([]);
+                setIsDepartmentFormVisible(false);
+                setIsEditMode(false);
+                setSelectedDepartment(null);
+                await fetchDepartments.refetch();
+              },
+              confirmText: "Yes, Remove Completely",
+              cancelText: "No, Keep as Employee"
+            });
+            return; // Exit early as modal will handle the update
+          }
+        }
+
+        // No managers removed or no confirmation needed, proceed with update
         await updateDepartment.mutateAsync({
           id: selectedDepartment.id,
           name: departmentName,
           managerIds: selectedManagerIds,
+          removeFromDepartment: [],
         });
         toast.success("Department updated successfully!");
       } else {
@@ -187,15 +267,24 @@ export default function AdminPage() {
   };
 
   const handleDeleteDepartment = async (departmentId: number) => {
-    openModal("Are you sure you want to delete this department?", async () => {
-      try {
-        await deleteDepartment.mutateAsync({ departmentId });
-        toast.success("Department deleted successfully!");
-        await fetchDepartments.refetch();
-      } catch (error) {
-        console.error(error);
-        toast.error("Failed to delete department. Please try again.");
-      }
+    const department = departments.find(d => d.id === departmentId);
+    openModal(`Are you sure you want to delete the department "${department?.name}"?`, async () => {});
+
+    setModalActions({
+      confirm: async () => {
+        try {
+          await deleteDepartment.mutateAsync({ departmentId });
+          toast.success("Department deleted successfully!");
+          await fetchDepartments.refetch();
+          closeModal();
+        } catch (error) {
+          console.error(error);
+          toast.error("Failed to delete department. Please try again.");
+        }
+      },
+      cancel: () => closeModal(),
+      confirmText: "Yes, Delete Department",
+      cancelText: "Cancel"
     });
   };
 
@@ -207,18 +296,56 @@ export default function AdminPage() {
     setIsDepartmentFormVisible(true);
   };
 
-  const handleUpdateDepartmentManagers = async (departmentId: number, managerIds: number[]) => {
+  const handleUpdateDepartmentManagers = async (departmentId: number, newManagerIds: number[]) => {
     try {
       const department = departments.find(d => d.id === departmentId);
       if (!department) return;
 
-      await updateDepartment.mutateAsync({
-        id: departmentId,
-        name: department.name,
-        managerIds,
-      });
-      toast.success("Department managers updated successfully!");
-      await fetchDepartments.refetch();
+      const removedManagerIds = department.managerIds.filter(id => !newManagerIds.includes(id));
+      const removedManager = availableManagers.find(manager => removedManagerIds.includes(manager.id));
+
+      if (removedManager) {
+        openModal(
+          `Do you want to remove ${removedManager.name} as an employee from the department as well?`,
+          async () => {}
+        );
+
+        setModalActions({
+          confirm: async () => {
+            await updateDepartment.mutateAsync({
+              id: departmentId,
+              name: department.name,
+              managerIds: newManagerIds,
+              removeFromDepartment: [removedManager.id],
+            });
+            toast.success("Manager removed from department completely");
+            closeModal();
+            await fetchDepartments.refetch();
+          },
+          cancel: async () => {
+            await updateDepartment.mutateAsync({
+              id: departmentId,
+              name: department.name,
+              managerIds: newManagerIds,
+              removeFromDepartment: [],
+            });
+            toast.success("Manager role removed but kept as employee");
+            closeModal();
+            await fetchDepartments.refetch();
+          },
+          confirmText: "Yes, Remove Completely",
+          cancelText: "No, Keep as Employee"
+        });
+      } else {
+        await updateDepartment.mutateAsync({
+          id: departmentId,
+          name: department.name,
+          managerIds: newManagerIds,
+          removeFromDepartment: [],
+        });
+        toast.success("Department managers updated successfully!");
+        await fetchDepartments.refetch();
+      }
     } catch (error) {
       console.error(error);
       toast.error("Failed to update department managers. Please try again.");
@@ -246,19 +373,16 @@ export default function AdminPage() {
           <p className="mb-4">{confirmMessage}</p>
           <div className="flex justify-end space-x-4">
             <button
-              className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
-              onClick={closeModal}
+              className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400 transition-colors"
+              onClick={modalActions.cancel}
             >
-              Cancel
+              {modalActions.cancelText || "Cancel"}
             </button>
             <button
-              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-              onClick={() => {
-                confirmAction();
-                closeModal();
-              }}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+              onClick={modalActions.confirm}
             >
-              Confirm
+              {modalActions.confirmText || "Confirm"}
             </button>
           </div>
         </div>
@@ -296,9 +420,8 @@ export default function AdminPage() {
           </button>
         </div>
       </div>
-
-      {/* User Form */}
-      {isUserFormVisible && (
+{/* User Form */}
+{isUserFormVisible && (
         <div className="mb-8 bg-white p-6 rounded shadow-lg">
           <form onSubmit={handleUserSubmit}>
             <h2 className="text-xl font-semibold mb-4">Create New User</h2>
@@ -590,5 +713,5 @@ export default function AdminPage() {
         )}
       </div>
     </main>
-);
+  );
 }

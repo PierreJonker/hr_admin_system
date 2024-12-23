@@ -144,11 +144,12 @@ export const admin_pageRouter = createTRPCRouter({
                 connect: input.managerIds.map((id) => ({ id })),
               }
             : undefined,
-          users: input.employeeIds
-            ? {
-                connect: input.employeeIds.map((id) => ({ id })),
-              }
-            : undefined,
+          users: {
+            connect: [
+              ...(input.employeeIds?.map((id) => ({ id })) || []),
+              ...(input.managerIds?.map((id) => ({ id })) || []) // Auto-connect managers as users
+            ]
+          },
         },
       });
 
@@ -161,6 +162,7 @@ export const admin_pageRouter = createTRPCRouter({
         id: z.number(),
         name: z.string(),
         managerIds: z.array(z.number()),
+        removeFromDepartment: z.array(z.number()).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -168,14 +170,52 @@ export const admin_pageRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN", message: "Unauthorized" });
       }
 
-      const updatedDepartment = await db.department.update({
+      // Get current department state
+      const currentDepartment = await db.department.findUnique({
+        where: { id: input.id },
+        include: {
+          managers: {
+            select: { id: true }
+          },
+          users: {
+            select: { id: true }
+          }
+        }
+      });
+
+      if (!currentDepartment) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Department not found" });
+      }
+
+      // Prepare update data
+      const updateData: any = {
+        name: input.name,
+        managers: {
+          set: input.managerIds.map(id => ({ id })),
+        },
+      };
+
+      // If we need to remove users completely from the department
+      if (input.removeFromDepartment?.length) {
+        updateData.users = {
+          disconnect: input.removeFromDepartment.map(id => ({ id }))
+        };
+      }
+
+      // First update removes managers and users if specified
+      await db.department.update({
+        where: { id: input.id },
+        data: updateData,
+      });
+
+      // Second update ensures all managers are department members
+      await db.department.update({
         where: { id: input.id },
         data: {
-          name: input.name,
-          managers: {
-            set: input.managerIds.map(id => ({ id })),
+          users: {
+            connect: input.managerIds.map(id => ({ id }))
           }
-        },
+        }
       });
 
       return { success: true, message: "Department updated successfully" };
