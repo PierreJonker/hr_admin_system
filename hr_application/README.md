@@ -6,6 +6,11 @@ This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3
 
 This project comes with a setup script (`setup.sh`) to simplify the initial setup process. Follow the steps below to set up and run the application.
 
+ADMIN Account : 
+
+Email : hradmin@test.com
+Password : TestPass1234
+
 ### Automatic Setup with `setup.sh`
 
 1. **Ensure Prerequisites**:
